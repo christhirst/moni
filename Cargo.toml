@@ -1,0 +1,14 @@
+[package]
+name = "moni"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prometheus = "0.13"
+lazy_static = "1.4.0"
+tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "macros", "net", "signal", "io-util","time"] }
+config = "0.14.0"
+serde ={ version = "1.0", features = ["derive"] }
+ldap3 = "0.11.4"
