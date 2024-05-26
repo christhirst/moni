@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::thread;
 //use std::time::Duration;
 use config::Config;
 use ldap3::result::LdapResult;
@@ -51,31 +53,60 @@ pub struct Root {
     pub key: String,
 }
  */
-async fn tcp_checker(authority: &str, config_timeout: u64) -> Result<TcpStream, ConnectionError> {
-    let timeout_duration = Duration::from_secs(config_timeout);
-    let result = timeout(timeout_duration, TcpStream::connect(authority)).await;
-    let result = match result {
-        Ok(result) => match result {
-            Ok(ok) => Ok(ok),
-            Err(e) => {
-                let err_str = e.to_string();
-                if err_str.contains("Connection refused") {
-                    Err(ConnectionError::ConnectionRefused)
-                } else if err_str.contains("Host not known") {
-                    Err(ConnectionError::HostNotKnown)
-                } else {
-                    panic!("{}", format!("{}", e))
-                }
-            }
-        },
-        Err(_) => todo!(),
-    };
+fn tcp_checker<'a>(
+    authority: &'a str,
+    config_timeout: &'a u64,
+) -> impl Future<Output = Result<TcpStream, ConnectionError>> + 'a {
+    async move {
+        let timeout_duration = Duration::from_secs(*config_timeout);
 
-    result
+        /* let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut result: Result<Result<TcpStream, std::io::Error>, time::error::Elapsed> =
+            Ok(Ok(TcpStream::connect(socket_addr))); */
+
+        let result = timeout(timeout_duration, TcpStream::connect(authority)).await;
+
+        let result = match result {
+            Ok(result) => match result {
+                Ok(ok) => Ok(ok),
+                Err(e) => {
+                    let err_str = e.to_string();
+                    if err_str.contains("Connection refused") {
+                        Err(ConnectionError::ConnectionRefused)
+                    } else if err_str.contains("Host not known") {
+                        Err(ConnectionError::HostNotKnown)
+                    } else {
+                        panic!("{}", format!("{}", e))
+                    }
+                }
+            },
+            Err(_) => todo!(),
+        };
+
+        result
+    }
 }
 
 async fn ldap_checker() -> Result<LdapResult, ConnectionError> {
     todo!()
+}
+use std::future::Future;
+
+async fn loop_spawn<'a, F, Fut>(
+    conf: &'a Settings,
+    //f: &dyn Fn() -> Result<TcpStream, ConnectionError>,
+    f: F,
+) where
+    F: Fn(&'a str, &'a u64) -> Fut,
+    Fut: Future<Output = Result<TcpStream, ConnectionError>> + Send,
+{
+    let mut interval = time::interval(Duration::from_secs(3));
+    loop {
+        let status = f(conf.hosts[0].authority.as_str(), &conf.hosts[0].interval).await;
+
+        interval.tick().await;
+        println!("{status:?} - tick");
+    }
 }
 
 #[tokio::main]
@@ -90,16 +121,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     // Print out our settings (as a HashMap)
-    let conf = settings.try_deserialize::<Settings>().unwrap();
-    println!("{:?}", conf.clone());
+    let conf: Settings = settings.try_deserialize::<Settings>().unwrap();
+    //println!("{:?}", conf.clone());
 
-    let mut interval = time::interval(Duration::from_secs(3));
-    loop {
-        let status = tcp_checker(conf.hosts[0].authority.as_str(), conf.hosts[0].interval).await;
+    // for i in conf.hosts {
+    println!("tick");
+    // Spin up another thread
 
-        interval.tick().await;
-        println!("{status:?} - tick");
-    }
+    /* thread::spawn(move || {
+        //println!("this is thread number {:?}", i);
+        loop_spawn(&conf, tcp_checker).await;
+    }); */
+
+    tokio::spawn(async move { loop_spawn(&conf, tcp_checker).await })
+        .await
+        .unwrap();
+
+    // }
+    println!("ticks");
+    loop {}
 
     Ok(())
 }
