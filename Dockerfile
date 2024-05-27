@@ -22,7 +22,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl --bin moni
 FROM gcr.io/distroless/cc AS runtime
 #WORKDIR /usr/local/bin/app
 COPY --from=planner /app/Config.toml /config/Config.toml
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/ldap-proxy /usr/local/bin/app
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/moni /usr/local/bin/app
 
 EXPOSE 9389
 CMD ["/usr/local/bin/app","-c","/config/Config.toml"]
