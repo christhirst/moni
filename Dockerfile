@@ -16,7 +16,7 @@ RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path r
 # Copy source code from previous stage
 COPY . .
 # Build application
-RUN cargo build --release --target x86_64-unknown-linux-musl --bin ldap-proxy
+RUN cargo build --release --target x86_64-unknown-linux-musl --bin moni
 
 
 FROM gcr.io/distroless/cc AS runtime
