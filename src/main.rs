@@ -10,6 +10,7 @@ use tokio::io::{AsyncWriteExt, Interest};
 use tokio::net::TcpStream;
 use tokio::time::{self, timeout, Duration};
 mod ldap;
+pub mod tcp;
 
 #[derive(Debug)]
 pub enum ConnectionError {
@@ -33,13 +34,13 @@ pub struct Settings {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+//#[serde(rename_all = "camelCase")]
 pub struct Host {
     pub authority: String,
     pub bind_dn: String,
     pub bind_pw: String,
     pub base: String,
-    pub scheme: String,
+    pub scheme: Option<String>,
     pub interval: u64,
 }
 
@@ -133,7 +134,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for i in conf.hosts {
         println!("ticks");
         // Spin up another thread
-        tokio::spawn(async move { loop_spawn(&i, tcp_checker).await });
+        tokio::spawn(async move { loop_spawn(&i, tcp::tcp_checker).await });
     }
 
     loop {}
