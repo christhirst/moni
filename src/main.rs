@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use tokio::io::{AsyncWriteExt, Interest};
 use tokio::net::TcpStream;
 use tokio::time::{self, timeout, Duration};
+mod ldap;
 
 #[derive(Debug)]
 pub enum ConnectionError {
@@ -35,6 +36,9 @@ pub struct Settings {
 #[serde(rename_all = "camelCase")]
 pub struct Host {
     pub authority: String,
+    pub bind_dn: String,
+    pub bind_pw: String,
+    pub base: String,
     pub scheme: String,
     pub interval: u64,
 }
@@ -93,7 +97,7 @@ async fn ldap_checker() -> Result<LdapResult, ConnectionError> {
 use std::future::Future;
 
 async fn loop_spawn<'a, F, Fut>(
-    conf: &'a Settings,
+    h: &'a Host,
     //f: &dyn Fn() -> Result<TcpStream, ConnectionError>,
     f: F,
 ) where
@@ -101,8 +105,9 @@ async fn loop_spawn<'a, F, Fut>(
     Fut: Future<Output = Result<TcpStream, ConnectionError>> + Send,
 {
     let mut interval = time::interval(Duration::from_secs(3));
+
     loop {
-        let status = f(conf.hosts[0].authority.as_str(), &conf.hosts[0].interval).await;
+        let status = f(h.authority.as_str(), &h.interval).await;
 
         interval.tick().await;
         println!("{status:?} - tick");
@@ -122,23 +127,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Print out our settings (as a HashMap)
     let conf: Settings = settings.try_deserialize::<Settings>().unwrap();
-    //println!("{:?}", conf.clone());
 
-    // for i in conf.hosts {
-    println!("tick");
-    // Spin up another thread
+    println!("{conf:?}");
 
-    /* thread::spawn(move || {
-        //println!("this is thread number {:?}", i);
-        loop_spawn(&conf, tcp_checker).await;
-    }); */
+    for i in conf.hosts {
+        println!("ticks");
+        // Spin up another thread
+        tokio::spawn(async move { loop_spawn(&i, tcp_checker).await });
+    }
 
-    tokio::spawn(async move { loop_spawn(&conf, tcp_checker).await })
-        .await
-        .unwrap();
-
-    // }
-    println!("ticks");
     loop {}
 
     Ok(())

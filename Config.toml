@@ -4,11 +4,14 @@ key = "189rjfadoisfj8923fjio"
 
 [[hosts]]
 authority   = "127.0.0.1:3001"
-scheme  = "3001"
+scheme  = "ldaps"
 interval = 3
 
 [[hosts]]
 authority   = "127.0.0.1:3002"
-scheme  = "3001"
+bind_dn = "admin"
+bind_pw = "admin"
+base ="dc=example,dc=org"
+scheme  = "ldaps"
 interval = 3
 
