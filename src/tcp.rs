@@ -1,13 +1,13 @@
-use std::{future::Future, time::Duration};
-
-use tokio::{net::TcpStream, time::timeout};
-
 use crate::ConnectionError;
+use crate::Status;
+use http::StatusCode;
+use std::{future::Future, time::Duration};
+use tokio::{net::TcpStream, time::timeout};
 
 pub async fn tcp_checker<'a>(
     authority: &'a str,
     config_timeout: &'a u64,
-) -> Result<TcpStream, ConnectionError> {
+) -> Result<StatusCode, ConnectionError> {
     //async move {
     let timeout_duration = Duration::from_secs(*config_timeout);
 
@@ -34,6 +34,14 @@ pub async fn tcp_checker<'a>(
         Err(_) => todo!(),
     };
 
-    result
+    //TODO move to own function
+
+    let result = match result {
+        Ok(ok) => Ok(http::status::StatusCode::OK),
+        Err(err) => Ok(http::status::StatusCode::SERVICE_UNAVAILABLE),
+    };
+
+    //result
     // }
+    result
 }

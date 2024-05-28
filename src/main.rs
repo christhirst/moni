@@ -1,28 +1,39 @@
+use std::collections::HashMap;
 use std::error::Error;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::thread;
+
 //use std::time::Duration;
 use config::Config;
 use ldap3::result::LdapResult;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tokio::io::{AsyncWriteExt, Interest};
+use std::future::Future;
 use tokio::net::TcpStream;
-use tokio::time::{self, timeout, Duration};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::time::{self, Duration};
 mod ldap;
 pub mod tcp;
+use http::StatusCode;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConnectionError {
     ConnectionRefused,
     HostNotKnown,
 }
 
 // /ticker
+#[derive(Default, Debug, Clone)]
 struct Status {
-    hosts: String,
-    http_status: Result<bool, ConnectionError>,
-    ldap_status: Result<LdapResult, ConnectionError>,
+    http_status: Vec<Result<StatusCode, ConnectionError>>,
+    //ldap_status: Result<LdapResult, ConnectionError>,
+}
+
+#[derive(Default, Debug, Clone)]
+struct gatherdstatus {
+    status: Vec<Status>,
+}
+impl gatherdstatus {
+    fn new() -> Self {
+        Default::default()
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +51,7 @@ pub struct Host {
     pub bind_dn: String,
     pub bind_pw: String,
     pub base: String,
+    pub filter: String,
     pub scheme: Option<String>,
     pub interval: u64,
 }
@@ -59,23 +71,23 @@ pub struct Root {
 }
  */
 
-async fn ldap_checker() -> Result<LdapResult, ConnectionError> {
-    todo!()
-}
-use std::future::Future;
-
 async fn loop_spawn<'a, F, Fut>(
+    tx: UnboundedSender<HashMap<String, gatherdstatus>>,
+
     h: &'a Host,
     //f: &dyn Fn() -> Result<TcpStream, ConnectionError>,
     f: F,
 ) where
     F: Fn(&'a str, &'a u64) -> Fut,
-    Fut: Future<Output = Result<TcpStream, ConnectionError>> + Send,
+    Fut: Future<Output = Result<StatusCode, ConnectionError>> + Send,
 {
     let mut interval = time::interval(Duration::from_secs(3));
-
+    let mut statusmap: HashMap<String, gatherdstatus> = HashMap::new();
+    statusmap.insert(h.authority.clone(), gatherdstatus::new());
     loop {
         let status = f(h.authority.as_str(), &h.interval).await;
+
+        tx.send(statusmap.clone());
 
         interval.tick().await;
         println!("{status:?} - tick");
@@ -95,16 +107,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Print out our settings (as a HashMap)
     let conf: Settings = settings.try_deserialize::<Settings>().unwrap();
-
     println!("{conf:?}");
 
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
     for i in conf.hosts {
+        let tx_clone = tx.clone();
         println!("ticks");
         // Spin up another thread
-        tokio::spawn(async move { loop_spawn(&i, tcp::tcp_checker).await });
+        tokio::spawn(async move { loop_spawn(tx_clone, &i, tcp::tcp_checker).await });
     }
 
-    loop {}
+    loop {
+        let received = rx.recv().await.unwrap();
+        println!("{received:?}");
+
+        for message in &received {
+            println!("{message:?}");
+        }
+    }
 
     Ok(())
 }
