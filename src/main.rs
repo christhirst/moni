@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hash;
 
 //use std::time::Duration;
 use config::Config;
@@ -21,18 +22,51 @@ pub enum ConnectionError {
 
 // /ticker
 #[derive(Default, Debug, Clone)]
-struct Status {
-    http_status: Vec<Result<StatusCode, ConnectionError>>,
+struct StatusC {
+    occurrences: u32,
     //ldap_status: Result<LdapResult, ConnectionError>,
 }
 
 #[derive(Default, Debug, Clone)]
+struct Status {
+    ldap_status: HashMap<StatusCode, u32>,
+}
+
+impl Status {
+    fn new() -> Self {
+        let mut s = Self {
+            ldap_status: HashMap::new(),
+        };
+        s.ldap_status.insert(StatusCode::OK, 0);
+        s
+    }
+}
+
+#[derive(Default, Debug, Clone)]
 struct gatherdstatus {
-    status: Vec<Status>,
+    host: HashMap<String, Status>,
+    //status: HashMap<StatusCode, Status>,
 }
 impl gatherdstatus {
     fn new() -> Self {
-        Default::default()
+        Self {
+            host: HashMap::new(),
+        }
+    }
+    fn initHost(mut self, host: String) -> Self {
+        self.host.insert(host, Status::new());
+        self
+    }
+
+    fn iterateOccurences(mut self, host: String, status: StatusCode) -> Self {
+        println!("{status:?}");
+        println!("{status:?}");
+        //TODO
+        let uu = self.host.get_mut(&host.to_string()).unwrap();
+        *uu.ldap_status.get_mut(&status).unwrap() += 1;
+        //self.status.get_mut(&status).unwrap().occurrences += 1;
+
+        self
     }
 }
 
@@ -72,8 +106,7 @@ pub struct Root {
  */
 
 async fn loop_spawn<'a, F, Fut>(
-    tx: UnboundedSender<HashMap<String, gatherdstatus>>,
-
+    tx: UnboundedSender<gatherdstatus>,
     h: &'a Host,
     //f: &dyn Fn() -> Result<TcpStream, ConnectionError>,
     f: F,
@@ -82,15 +115,23 @@ async fn loop_spawn<'a, F, Fut>(
     Fut: Future<Output = Result<StatusCode, ConnectionError>> + Send,
 {
     let mut interval = time::interval(Duration::from_secs(3));
-    let mut statusmap: HashMap<String, gatherdstatus> = HashMap::new();
-    statusmap.insert(h.authority.clone(), gatherdstatus::new());
+    let mut statusmap: gatherdstatus = gatherdstatus {
+        host: HashMap::new(),
+    };
+    statusmap.host.insert(h.authority.clone(), Status::new());
     loop {
         let status = f(h.authority.as_str(), &h.interval).await;
+        match status {
+            Ok(result) => &statusmap
+                .clone()
+                .iterateOccurences(h.authority.clone(), status.unwrap()),
+            Err(e) => todo!(),
+        };
 
         tx.send(statusmap.clone());
 
         interval.tick().await;
-        println!("{status:?} - tick");
+        //println!("{status:?} - tick");
     }
 }
 
@@ -122,7 +163,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let received = rx.recv().await.unwrap();
         println!("{received:?}");
 
-        for message in &received {
+        for message in &received.host {
             println!("{message:?}");
         }
     }
