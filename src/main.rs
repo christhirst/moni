@@ -33,11 +33,11 @@ struct Status {
 }
 
 impl Status {
-    fn new() -> Self {
+    fn new(st: StatusCode) -> Self {
         let mut s = Self {
             ldap_status: HashMap::new(),
         };
-        s.ldap_status.insert(StatusCode::OK, 0);
+        s.ldap_status.insert(st, 0);
         s
     }
 }
@@ -47,22 +47,24 @@ struct gatherdstatus {
     host: HashMap<String, Status>,
     //status: HashMap<StatusCode, Status>,
 }
+
 impl gatherdstatus {
     fn new() -> Self {
         Self {
             host: HashMap::new(),
         }
     }
-    fn initHost(mut self, host: String) -> Self {
+    /* fn initHost(mut self, host: String) -> Self {
         self.host.insert(host, Status::new());
         self
-    }
+    } */
 
     fn iterateOccurences(mut self, host: String, status: StatusCode) -> Self {
         println!("{status:?}");
-        println!("{status:?}");
         //TODO
-        let uu = self.host.get_mut(&host.to_string()).unwrap();
+        let mut ii = Status::new(status);
+        let uu = self.host.get_mut(&host.to_string()).unwrap_or(&mut ii);
+        println!("{uu:?}");
         *uu.ldap_status.get_mut(&status).unwrap() += 1;
         //self.status.get_mut(&status).unwrap().occurrences += 1;
 
@@ -71,7 +73,7 @@ impl gatherdstatus {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+//#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub debug: bool,
     pub key: String,
@@ -118,8 +120,11 @@ async fn loop_spawn<'a, F, Fut>(
     let mut statusmap: gatherdstatus = gatherdstatus {
         host: HashMap::new(),
     };
-    statusmap.host.insert(h.authority.clone(), Status::new());
+    statusmap
+        .host
+        .insert(h.authority.clone(), Status::new(StatusCode::OK));
     loop {
+        //TODO get status for host out of channel
         let status = f(h.authority.as_str(), &h.interval).await;
         match status {
             Ok(result) => &statusmap
